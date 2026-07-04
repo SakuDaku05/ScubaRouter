@@ -152,7 +152,7 @@ def run_eval(
         task_type  = task.get("task_type", "unknown")
         difficulty = task.get("difficulty", "normal")
 
-        result = pipeline.handle_query(query, task_type=task_type)
+        result = pipeline.handle_query(query, task_type=task_type, difficulty=difficulty)
 
         ok, matched_kw = smart_match(result["final_answer"], expected)
         remote_tok     = result["remote_tokens_used"]
