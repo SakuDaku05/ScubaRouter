@@ -46,9 +46,23 @@ DIFFICULTY_COLOR = {
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 
-def simple_match(final_answer: str, expected: str) -> bool:
-    """Case-insensitive keyword-in-answer check."""
-    return expected.strip().lower() in final_answer.strip().lower()
+def smart_match(final_answer: str, expected) -> tuple:
+    """
+    Flexible keyword matcher. `expected` can be:
+      - A string  → single keyword check (legacy)
+      - A list    → ANY keyword in the list found in answer = pass
+    Returns (matched: bool, matched_keyword: str)
+    """
+    answer_lower = final_answer.strip().lower()
+    if isinstance(expected, str):
+        keywords = [expected]
+    else:
+        keywords = list(expected)
+
+    for kw in keywords:
+        if kw.strip().lower() in answer_lower:
+            return True, kw
+    return False, f"none of {keywords[:3]}"
 
 
 def bar(value: float, width: int = 20, fill: str = "#", empty: str = ".") -> str:
@@ -140,14 +154,15 @@ def run_eval(
 
         result = pipeline.handle_query(query, task_type=task_type)
 
-        ok         = simple_match(result["final_answer"], expected)
-        remote_tok = result["remote_tokens_used"]
-        route      = result["route"]
-        confidence = result["confidence"]
+        ok, matched_kw = smart_match(result["final_answer"], expected)
+        remote_tok     = result["remote_tokens_used"]
+        route          = result["route"]
+        confidence     = result["confidence"]
 
         # store for later
-        results.append({**task, "ok": ok, "remote_tokens": remote_tok,
-                         "route": route, "confidence": confidence,
+        results.append({**task, "ok": ok, "matched_kw": matched_kw,
+                         "remote_tokens": remote_tok, "route": route,
+                         "confidence": confidence,
                          "final_answer": result["final_answer"]})
 
         correct          += ok
@@ -162,9 +177,9 @@ def run_eval(
         bd["remote_tokens"] += remote_tok
         bd["escalations"] += (1 if route == "escalate" else 0)
 
-        ok_str    = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+        ok_str  = f"{GREEN}✓ [{matched_kw}]{RESET}" if ok else f"{RED}✗{RESET}"
         tok_str   = f"{YELLOW}{remote_tok:>5}{RESET}" if remote_tok > 0 else f"{DIM}{remote_tok:>5}{RESET}"
-        q_short   = (query[:42] + "…") if len(query) > 42 else query
+        q_short   = (query[:38] + "…") if len(query) > 38 else query
 
         print(
             f"  {i:<4} {task_type:<15} {diff_label(difficulty):<12} "
@@ -220,8 +235,11 @@ def run_eval(
         print(f"{BOLD}  {RED}FAILED TASKS ({len(failures)}){RESET}")
         print(sep())
         for r in failures:
-            print(f"  [{r.get('difficulty','?'):>9}] [{r.get('task_type','?'):<14}] Q: {r['query'][:60]}")
-            print(f"  {DIM}Expected: '{r['expected']}'   Got: '{r['final_answer'][:80]}'{RESET}")
+            exp = r['expected']
+            exp_str = "/".join(exp[:4]) if isinstance(exp, list) else exp
+            print(f"  [{r.get('difficulty','?'):>9}] [{r.get('task_type','?'):<14}] Q: {r['query'][:65]}")
+            print(f"  {DIM}Wanted any of: [{exp_str}]{RESET}")
+            print(f"  {DIM}Got:           '{r['final_answer'][:100]}'{RESET}")
             print()
     else:
         print(f"\n  {GREEN}{BOLD}No failures! All tasks answered correctly.{RESET}")

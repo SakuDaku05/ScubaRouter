@@ -6,7 +6,7 @@ never routes a query to remote without first trying it for free.
 from dataclasses import dataclass
 from typing import List, Optional
 
-from .mf_router import MatrixFactorizationPreCheck
+from .mf_router_strict import MatrixFactorizationPreCheck
 
 
 @dataclass
