@@ -21,6 +21,7 @@ from .compressor import Compressor
 from .logger import Logger
 from .format_validator import validate as format_validate
 from .answer_normalizer import normalize as normalize_answer
+from .exact_cache import ExactCache
 
 
 class RoutingPipeline:
@@ -39,6 +40,7 @@ class RoutingPipeline:
         self.compressor = Compressor(local_model)
         self.n_consistency_samples = routing_cfg.get("self_consistency_samples", 1)
         self.logger = logger or Logger()
+        self.cache = ExactCache()
 
     def handle_query(
         self,
@@ -46,6 +48,12 @@ class RoutingPipeline:
         task_type: Optional[str] = None,
         difficulty: Optional[str] = None,
     ) -> dict:
+        # ── Step 0: Check exact cache (FREE) ──────────────────────────────
+        cached = self.cache.get(query)
+        if cached:
+            self.logger.log(cached)
+            return cached
+
         # ── Step 1: Local model always runs first (FREE) ──────────────────
         samples = self.local_model.generate(query, n_samples=self.n_consistency_samples)
         raw_answer = samples[0] if samples else ""
@@ -81,7 +89,7 @@ class RoutingPipeline:
         final_answer = answer
 
         if decision.route == "escalate":
-            compressed_prompt = self.compressor.compress(query, context=answer)
+            compressed_prompt = self.compressor.compress(query)
             remote_answer, remote_tokens = self.remote_model.generate(compressed_prompt)
             final_answer = remote_answer or answer  # fall back to local if remote fails
 
@@ -102,5 +110,6 @@ class RoutingPipeline:
             "remote_tokens_used": remote_tokens,
             "final_answer": final_answer,
         }
+        self.cache.set(query, record)
         self.logger.log(record)
         return record

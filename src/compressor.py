@@ -1,28 +1,22 @@
 """
 Prompt compression applied ONLY on the escalation path, since every token
-sent to Fireworks counts against the score. Two stages:
+sent to the remote API counts against the score.
 
-  1. Deterministic strip -- free, instant, no model call.
-  2. Local-model summarization for long context -- still free, uses local
-     compute to shrink what gets sent remotely.
+Updates:
+1. We no longer send the local model's failed answer as context (it wastes tokens
+   and can confuse the remote model).
+2. We append a strict instruction to prevent the 70B model from outputting
+   long explanations. We want a 1-token output if possible.
 """
 import re
 
 _BLANK_LINES = re.compile(r"\n{3,}")
 _REPEATED_SPACES = re.compile(r"[ \t]{2,}")
 
-MAX_CONTEXT_CHARS_BEFORE_SUMMARY = 1500
-
-SUMMARIZE_PROMPT_TEMPLATE = """Summarize the following context in the fewest words possible \
-while keeping every fact needed to answer the query below. Do not add commentary.
-
-QUERY: {query}
-
-CONTEXT:
-{context}
-
-SUMMARY:"""
-
+STRICT_OUTPUT_INSTRUCTION = (
+    "Output ONLY the final answer. Do not include any explanations, "
+    "reasoning, formatting, or conversational preamble."
+)
 
 def deterministic_strip(text: str) -> str:
     cleaned = text.strip()
@@ -30,19 +24,16 @@ def deterministic_strip(text: str) -> str:
     cleaned = _REPEATED_SPACES.sub(" ", cleaned)
     return cleaned
 
-
 class Compressor:
     def __init__(self, local_model):
+        # Local model no longer needed for summarization, but kept for API compatibility
         self.local_model = local_model
 
     def compress(self, query: str, context: str = "") -> str:
-        query = deterministic_strip(query)
-        context = deterministic_strip(context) if context else ""
-
-        if len(context) > MAX_CONTEXT_CHARS_BEFORE_SUMMARY:
-            summary_prompt = SUMMARIZE_PROMPT_TEMPLATE.format(query=query, context=context)
-            context = self.local_model.generate(summary_prompt, n_samples=1)[0]
-
-        if context:
-            return f"{query}\n\nRelevant context:\n{context}"
-        return query
+        # We ignore 'context' intentionally now, as sending the local model's
+        # wrong answer just wastes remote input tokens and anchors the remote model to wrong logic.
+        
+        cleaned_query = deterministic_strip(query)
+        
+        # Append strict instruction to save output tokens
+        return f"{cleaned_query}\n\n{STRICT_OUTPUT_INSTRUCTION}"
