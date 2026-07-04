@@ -1,0 +1,18 @@
+local:
+  base_url: "https://api.groq.com/openai/v1"
+  api_key_env: "GROQ_API"
+  model: "llama-3.1-8b-instant"
+  timeout: 30
+
+remote:
+  base_url: "https://api.groq.com/openai/v1"
+  api_key_env: "GROQ_API"
+  model: "llama-3.3-70b-versatile"
+  timeout: 60
+
+routing:
+  use_mock: false
+  verification_threshold: 0.7
+  self_consistency_samples: 1
+  static_escalate_task_types: []
+  use_mf_precheck: false

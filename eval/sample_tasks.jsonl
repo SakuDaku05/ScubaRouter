@@ -1,0 +1,51 @@
+{"query": "What is the capital of France?", "expected": "Paris", "task_type": "qa", "difficulty": "easy"}
+{"query": "Who wrote Romeo and Juliet?", "expected": "Shakespeare", "task_type": "qa", "difficulty": "easy"}
+{"query": "What is the boiling point of water in Celsius?", "expected": "100", "task_type": "qa", "difficulty": "easy"}
+{"query": "What planet is closest to the Sun?", "expected": "Mercury", "task_type": "qa", "difficulty": "easy"}
+{"query": "In what year did World War II end?", "expected": "1945", "task_type": "qa", "difficulty": "easy"}
+{"query": "What is the chemical symbol for gold?", "expected": "Au", "task_type": "qa", "difficulty": "easy"}
+{"query": "What is the largest ocean on Earth?", "expected": "Pacific", "task_type": "qa", "difficulty": "easy"}
+{"query": "How many sides does a hexagon have?", "expected": "6", "task_type": "qa", "difficulty": "easy"}
+{"query": "What is the time complexity of binary search?", "expected": "log", "task_type": "qa", "difficulty": "normal"}
+{"query": "Explain the difference between TCP and UDP in one sentence.", "expected": "connection", "task_type": "qa", "difficulty": "normal"}
+{"query": "What is the CAP theorem in distributed systems?", "expected": "consistency", "task_type": "qa", "difficulty": "normal"}
+{"query": "What is the difference between a process and a thread?", "expected": "memory", "task_type": "qa", "difficulty": "normal"}
+{"query": "What does SOLID stand for in software engineering?", "expected": "Single", "task_type": "qa", "difficulty": "normal"}
+{"query": "Explain what a hash collision is and how open addressing resolves it.", "expected": "probe", "task_type": "qa", "difficulty": "hard"}
+{"query": "What is the difference between optimistic and pessimistic locking in databases?", "expected": "conflict", "task_type": "qa", "difficulty": "hard"}
+{"query": "Describe the Byzantine Generals Problem and its relevance to blockchain consensus.", "expected": "fault", "task_type": "qa", "difficulty": "hard"}
+{"query": "Explain the Halting Problem and why it is undecidable.", "expected": "undecidable", "task_type": "qa", "difficulty": "very_hard"}
+{"query": "What is 17 * 24?", "expected": "408", "task_type": "math", "difficulty": "easy"}
+{"query": "What is the square root of 144?", "expected": "12", "task_type": "math", "difficulty": "easy"}
+{"query": "What is 15% of 240?", "expected": "36", "task_type": "math", "difficulty": "easy"}
+{"query": "Solve: 3x + 7 = 22. What is x?", "expected": "5", "task_type": "math", "difficulty": "normal"}
+{"query": "If a train travels at 60 mph for 2.5 hours, how far does it travel?", "expected": "150", "task_type": "math", "difficulty": "normal"}
+{"query": "A store sells a jacket for $120 after a 20% discount. What was the original price?", "expected": "150", "task_type": "math", "difficulty": "normal"}
+{"query": "A rectangle has a length of 15 cm and a width of 8 cm. What is its area?", "expected": "120", "task_type": "math", "difficulty": "normal"}
+{"query": "Solve the system: 2x + 3y = 12 and x - y = 1. What is x?", "expected": "3", "task_type": "math", "difficulty": "hard"}
+{"query": "A ball is thrown upward with initial velocity 20 m/s. Using g=10 m/s^2, what is the max height?", "expected": "20", "task_type": "math", "difficulty": "hard"}
+{"query": "Find the derivative of f(x) = 3x^3 - 5x^2 + 2x - 7. What is f'(x) at x=2?", "expected": "18", "task_type": "math", "difficulty": "hard"}
+{"query": "An investment of $1000 grows at 8% compounded annually. What is the value after 5 years? Round to the nearest dollar.", "expected": "1469", "task_type": "math", "difficulty": "hard"}
+{"query": "Prove by induction that the sum of the first n positive integers equals n(n+1)/2. What is the base case result for n=1?", "expected": "1", "task_type": "math", "difficulty": "very_hard"}
+{"query": "Evaluate the integral of x^2 * e^x from 0 to 1. Give the answer to 2 decimal places.", "expected": "0.71", "task_type": "math", "difficulty": "very_hard"}
+{"query": "Write a Python function that returns the square of a number.", "expected": "def", "task_type": "code", "difficulty": "easy"}
+{"query": "Write a Python one-liner to reverse a string s.", "expected": "[::-1]", "task_type": "code", "difficulty": "easy"}
+{"query": "Write a Python list comprehension that returns even numbers from 1 to 20.", "expected": "for", "task_type": "code", "difficulty": "easy"}
+{"query": "Write a Python function that checks if a number is prime.", "expected": "def", "task_type": "code", "difficulty": "normal"}
+{"query": "Write a Python function that uses a dictionary to count word frequencies in a given string.", "expected": "def", "task_type": "code", "difficulty": "normal"}
+{"query": "Write a Python decorator that logs the name and execution time of any function it wraps.", "expected": "def", "task_type": "code", "difficulty": "hard"}
+{"query": "Write a Python function to perform binary search on a sorted list and return the index, or -1 if not found.", "expected": "def", "task_type": "code", "difficulty": "hard"}
+{"query": "Implement a Python LRU Cache class using only a dict and a doubly linked list (no functools).", "expected": "class", "task_type": "code", "difficulty": "very_hard"}
+{"query": "Write a Python async generator that streams chunks of a large file line-by-line without loading it all into memory.", "expected": "async", "task_type": "code", "difficulty": "very_hard"}
+{"query": "Summarize: The cat sat on the mat and looked out the window at birds.", "expected": "cat", "task_type": "summarization", "difficulty": "easy"}
+{"query": "Summarize in one sentence: Machine learning is a subset of artificial intelligence that enables systems to learn from data, identify patterns, and make decisions with minimal human intervention.", "expected": "machine learning", "task_type": "summarization", "difficulty": "easy"}
+{"query": "What is the main idea? 'Photosynthesis converts light energy into chemical energy stored in glucose, using CO2 and water, releasing oxygen as a byproduct.'", "expected": "photosynthesis", "task_type": "summarization", "difficulty": "normal"}
+{"query": "Identify the core argument: 'While microservices enable independent deployment and scaling, they introduce significant operational complexity including service discovery, distributed tracing, and eventual consistency challenges that monolithic architectures simply avoid.'", "expected": "complexity", "task_type": "summarization", "difficulty": "hard"}
+{"query": "Extract the key trade-off: 'Transformer models achieve state-of-the-art results on NLP tasks through self-attention mechanisms, but their quadratic complexity with respect to sequence length makes them prohibitively expensive for very long documents without approximation methods like sparse or linear attention.'", "expected": "quadratic", "task_type": "summarization", "difficulty": "very_hard"}
+{"query": "Translate the following to French: 'Good morning, how are you?'", "expected": "bonjour", "task_type": "translation", "difficulty": "easy"}
+{"query": "Translate to Spanish: 'The weather is beautiful today.'", "expected": "tiempo", "task_type": "translation", "difficulty": "easy"}
+{"query": "Translate to German: 'Where is the nearest hospital?'", "expected": "Krankenhaus", "task_type": "translation", "difficulty": "normal"}
+{"query": "Translate to Japanese (romaji is fine): 'I would like a cup of green tea, please.'", "expected": "ocha", "task_type": "translation", "difficulty": "hard"}
+{"query": "What is the name of the algorithm used by Git to hash commit objects?", "expected": "SHA", "task_type": "qa", "difficulty": "normal"}
+{"query": "In Python, what is the difference between __repr__ and __str__?", "expected": "repr", "task_type": "qa", "difficulty": "normal"}
+{"query": "Explain why Python's GIL prevents true parallelism in CPU-bound multi-threaded programs.", "expected": "thread", "task_type": "qa", "difficulty": "hard"}
