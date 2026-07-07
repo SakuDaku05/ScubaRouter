@@ -30,7 +30,7 @@ class MockClient:
     def __init__(self, label: str = "mock"):
         self.label = label
 
-    def generate(self, prompt: str, n: int = 1, system: Optional[str] = None) -> List[GenerationResult]:
+    def generate(self, prompt: str, n: int = 1, system: Optional[str] = None, max_tokens: Optional[int] = None) -> List[GenerationResult]:
         canned = f"[{self.label} mock answer for]: {prompt[:80]}"
         return [
             GenerationResult(
@@ -50,7 +50,7 @@ class OpenAICompatibleClient:
         self.max_retries = max_retries
         self.client = OpenAI(base_url=base_url, api_key=api_key or "not-needed", timeout=timeout)
 
-    def generate(self, prompt: str, n: int = 1, system: Optional[str] = None) -> List[GenerationResult]:
+    def generate(self, prompt: str, n: int = 1, system: Optional[str] = None, max_tokens: Optional[int] = None) -> List[GenerationResult]:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -58,11 +58,10 @@ class OpenAICompatibleClient:
 
         for attempt in range(self.max_retries + 1):
             try:
-                resp = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    n=n,
-                )
+                create_kwargs = dict(model=self.model, messages=messages, n=n)
+                if max_tokens is not None:
+                    create_kwargs["max_tokens"] = max_tokens
+                resp = self.client.chat.completions.create(**create_kwargs)
                 usage = resp.usage
                 num_choices = max(len(resp.choices), 1)
                 # Some servers report one usage total for all n choices;

@@ -1,18 +1,26 @@
 """
 Main orchestration: the cascade described in the architecture spec.
-handle_query() is the single entry point the eval harness (and, later,
-the real hackathon task runner) should call.
+handle_query() is the single entry point the eval harness calls.
 
-Pipeline order:
-  1. Local model generates an answer (FREE)
-  2. Answer normalizer strips preamble/fences (FREE, pure regex)
-  3. Format validator checks structural correctness (FREE, deterministic)
+Pipeline order (all steps except escalation are FREE — zero scored tokens):
+  1. Auto-classify task type from prompt keywords (FREE, deterministic)
+  2. Local model generates an answer (FREE — local tokens not scored)
+  3. Answer normalizer strips preamble/fences (FREE, pure regex)
+  4. Format validator checks structural correctness (FREE, deterministic)
      → if fails: force confidence=0.0, skip verifier, escalate immediately
-  4. MF pre-check: obviously easy? skip verifier, confidence=1.0 (FREE)
-  5. Self-verifier: LLM grades its own answer (FREE, uses local model)
-  6. Decision gate: confidence vs. per-type/difficulty threshold (FREE)
-     → if escalate: compress + call remote model (PAID, scored)
+  5. Supra / MF pre-check: obviously easy? skip verifier, confidence=1.0 (FREE)
+  6. Self-verifier: local model grades its own answer (FREE)
+  7. Decision gate: confidence vs. per-type/difficulty threshold (FREE)
+     → if escalate: compress + call remote model (PAID — tokens recorded by proxy)
+       - Use fast_model for marginally-failed queries
+       - Use strong_model for clearly-hard queries (math, code, logic)
+
+Token-saving rules applied on escalation path:
+  - Prompt is stripped/compressed before sending
+  - max_tokens is capped per task type
+  - Output-only instruction appended to prevent verbose explanations
 """
+import re
 from typing import Optional
 
 from .verifier import Verifier
@@ -21,8 +29,84 @@ from .compressor import Compressor
 from .logger import Logger
 from .format_validator import validate as format_validate
 from .answer_normalizer import normalize as normalize_answer
-from .exact_cache import ExactCache
 
+
+# ── Task-type auto-classifier ─────────────────────────────────────────────────
+# Maps prompt patterns to hackathon task categories.
+# These drive per-type routing thresholds WITHOUT needing labeled task_type input.
+
+_TASK_CLASSIFIERS = [
+    # Code generation / debugging — check before math to avoid false positives
+    ("code",    re.compile(
+        r"\b(write|implement|create|code|function|class|def |program|script|"
+        r"debug|fix (the |this )?bug|what('s| is) wrong|correct (the )?code)\b",
+        re.IGNORECASE)),
+    # Mathematical reasoning
+    ("math",    re.compile(
+        r"\b(calculat|comput|solv|evaluat|integrat|differentiat|derivative|"
+        r"percent|probability|equation|arithmetic|algebra|proof|sum of|"
+        r"how (many|much|far|long)|what is \d|\d\s*[\+\-\*\/\^]\s*\d)\b",
+        re.IGNORECASE)),
+    # Sentiment classification
+    ("sentiment", re.compile(
+        r"\b(sentiment|positive|negative|neutral|tone|emotion|feel|opinion|"
+        r"review|label (the |this )?(sentiment|text)|classify (the |this )?(review|text))\b",
+        re.IGNORECASE)),
+    # Named entity recognition
+    ("ner",     re.compile(
+        r"\b(extract|identify|list|find|name).{0,40}(entit|person|organization|"
+        r"location|date|company|place|people|named)\b",
+        re.IGNORECASE)),
+    # Text summarization
+    ("summarization", re.compile(
+        r"\b(summarize|summarise|summary|condense|shorten|main (idea|point|argument)|"
+        r"in (one|1|two|2) sentence|key takeaway|tldr|tl;dr)\b",
+        re.IGNORECASE)),
+    # Logical / deductive reasoning
+    ("logical_reasoning", re.compile(
+        r"\b(logic|deduc|infer|puzzle|constraint|if .+ then|who (is|must|can)|"
+        r"which (one|person|option)|only if|cannot both|must be (true|false)|"
+        r"conclude|valid argument)\b",
+        re.IGNORECASE)),
+    # Factual knowledge / QA (broad catch-all, low priority)
+    ("factual_knowledge", re.compile(
+        r"\b(what (is|are|was|were)|who (is|was)|when (did|was)|where (is|was)|"
+        r"why (does|did|is)|how does|explain|define|describe|tell me about)\b",
+        re.IGNORECASE)),
+]
+
+# Per-task max_tokens for remote calls — cap output to minimize scored tokens
+_MAX_TOKENS_BY_TYPE = {
+    "math":              64,   # just the number + brief working
+    "sentiment":         32,   # one label + one sentence justification
+    "ner":              128,   # entity list
+    "summarization":    128,   # summary paragraph
+    "code":             512,   # full function
+    "logical_reasoning": 128,  # short answer + single-line justification
+    "factual_knowledge":  96,  # a concise factual answer
+    "qa":                 96,
+    "default":           256,
+}
+
+# Hard-escalate these task types — local models are reliably weak here.
+_ALWAYS_ESCALATE_TYPES = {"logical_reasoning"}
+
+
+def classify_task_type(query: str, given_type: Optional[str] = None) -> str:
+    """
+    If a task_type is provided by the caller, trust it.
+    Otherwise, use regex heuristics to infer from the prompt.
+    Falls back to 'qa' if nothing matches.
+    """
+    if given_type:
+        return given_type
+    for label, pattern in _TASK_CLASSIFIERS:
+        if pattern.search(query):
+            return label
+    return "qa"
+
+
+# ── Pipeline ──────────────────────────────────────────────────────────────────
 
 class RoutingPipeline:
     def __init__(self, local_model, remote_model, config: dict, logger: Optional[Logger] = None):
@@ -34,13 +118,14 @@ class RoutingPipeline:
             threshold=routing_cfg["verification_threshold"],
             static_escalate_task_types=routing_cfg.get("static_escalate_task_types", []),
             use_mf_precheck=routing_cfg.get("use_mf_precheck", False),
+            use_supra=routing_cfg.get("use_supra", False),
+            supra_complexity_at=routing_cfg.get("supra_complexity_at", 3),
             per_type_thresholds=routing_cfg.get("per_type_thresholds", {}),
             per_difficulty_thresholds=routing_cfg.get("per_difficulty_thresholds", {}),
         )
         self.compressor = Compressor(local_model)
         self.n_consistency_samples = routing_cfg.get("self_consistency_samples", 1)
         self.logger = logger or Logger()
-        self.cache = ExactCache()
 
     def handle_query(
         self,
@@ -48,41 +133,52 @@ class RoutingPipeline:
         task_type: Optional[str] = None,
         difficulty: Optional[str] = None,
     ) -> dict:
-        # ── Step 0: Check exact cache (FREE) ──────────────────────────────
-        cached = self.cache.get(query)
-        if cached:
-            self.logger.log(cached)
-            return cached
+        # ── Step 1: Auto-classify task type (FREE) ────────────────────────
+        task_type = classify_task_type(query, given_type=task_type)
 
-        # ── Step 1: Local model always runs first (FREE) ──────────────────
-        samples = self.local_model.generate(query, n_samples=self.n_consistency_samples)
-        raw_answer = samples[0] if samples else ""
-
-        # ── Step 2: Normalize the answer (FREE, pure regex) ───────────────
-        # Strips "Sure! Here is...", markdown fences, trailing meta-commentary.
-        # This prevents false format-validation failures caused by preamble.
-        answer = normalize_answer(raw_answer)
-
-        # ── Step 3: Format validation (FREE, deterministic) ───────────────
-        format_ok, format_reason = format_validate(task_type or "", query, answer)
+        # ── Step 1.5: Supra Pre-check (FREE) ──────────────────────────────
         format_forced_escalation = False
         skip_verification = False
-
-        if not format_ok:
-            # Structural format failure — don't waste a verifier call on a
-            # broken answer; force escalation immediately.
+        from .supra_precheck import PreCheckResult as _PCR
+        precheck_result = _PCR(looks_easy=False, score=0.0, source="not_run")
+        
+        confidence = -1.0
+        
+        if task_type in _ALWAYS_ESCALATE_TYPES:
             confidence = 0.0
-            format_forced_escalation = True
         else:
-            # ── Step 4: Fast pre-check (FREE) ─────────────────────────────
-            skip_verification = self.router.should_skip_verification(query)
-            if skip_verification:
+            precheck_result = self.router.precheck_query(query)
+            skip_verification = precheck_result.looks_easy
+            if precheck_result.score == 0.0 and "strict" not in precheck_result.source:
+                confidence = 0.0
+        
+        raw_answer = ""
+        answer = ""
+        format_ok = True
+        format_reason = "not_run"
+        
+        # Only run local generation if we haven't already decided to escalate
+        if confidence == -1.0 or skip_verification:
+            # ── Step 2: Local model generates answer (FREE) ───────────────────
+            samples = self.local_model.generate(query, n_samples=self.n_consistency_samples)
+            raw_answer = samples[0] if samples else ""
+    
+            # ── Step 3: Normalize the answer (FREE, pure regex) ───────────────
+            answer = normalize_answer(raw_answer)
+    
+            # ── Step 4: Format validation (FREE, deterministic) ───────────────
+            format_ok, format_reason = format_validate(task_type or "", query, answer)
+            
+            if not format_ok:
+                confidence = 0.0
+                format_forced_escalation = True
+            elif skip_verification:
                 confidence = 1.0
             else:
-                # ── Step 5: Self-verifier (FREE, local model) ─────────────
+                # ── Step 6: Self-verifier (FREE, local model) ─────────────
                 confidence = self.verifier.score(query, answer, samples=samples)
 
-        # ── Step 6: Decision gate (FREE) ──────────────────────────────────
+        # ── Step 7: Decision gate (FREE) ──────────────────────────────────
         decision = self.router.decide(query, task_type, confidence, difficulty=difficulty)
 
         remote_tokens = 0
@@ -90,15 +186,24 @@ class RoutingPipeline:
 
         if decision.route == "escalate":
             compressed_prompt = self.compressor.compress(query)
-            remote_answer, remote_tokens = self.remote_model.generate(compressed_prompt)
-            final_answer = remote_answer or answer  # fall back to local if remote fails
+            max_tok = _MAX_TOKENS_BY_TYPE.get(task_type, _MAX_TOKENS_BY_TYPE["default"])
+
+            # Use the fast (smaller/cheaper) model if confidence was moderate;
+            # only pull in the strong model for definitely-hard queries.
+            use_fast = (confidence > 0.3) and not format_forced_escalation
+            remote_answer, remote_tokens = self.remote_model.generate(
+                compressed_prompt,
+                use_fast_model=use_fast,
+                max_tokens=max_tok,
+            )
+            final_answer = remote_answer or answer
 
         record = {
             "query": query,
             "task_type": task_type,
             "difficulty": difficulty,
             "raw_local_answer": raw_answer,
-            "local_answer": answer,          # normalized
+            "local_answer": answer,
             "confidence": confidence,
             "effective_threshold": decision.effective_threshold,
             "format_ok": format_ok,
@@ -109,7 +214,11 @@ class RoutingPipeline:
             "skipped_verification": skip_verification,
             "remote_tokens_used": remote_tokens,
             "final_answer": final_answer,
+            "supra_source": precheck_result.source if not format_forced_escalation else "format_failed",
+            "supra_complexity": getattr(precheck_result, "complexity", 0),
+            "supra_domain": getattr(precheck_result, "domain", ""),
+            "supra_is_math": getattr(precheck_result, "is_math", False),
+            "supra_is_code": getattr(precheck_result, "is_code", False),
         }
-        self.cache.set(query, record)
         self.logger.log(record)
         return record

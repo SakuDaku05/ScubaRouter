@@ -1,4 +1,5 @@
 import pytest
+# pyrefly: ignore [missing-import]
 from src.pipeline import RoutingPipeline
 
 class AdversarialLocalModel:
@@ -11,7 +12,7 @@ class AdversarialLocalModel:
         return ["adversarial local answer"]
 
 class DummyRemoteModel:
-    def generate(self, prompt):
+    def generate(self, prompt, **kwargs):
         return "remote answer", 10
 
 def test_empty_query():

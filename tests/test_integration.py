@@ -8,11 +8,11 @@ class MockLocalModel:
         return ["Here is the answer: local"]
 
 class MockRemoteModel:
-    def generate(self, prompt):
+    def generate(self, prompt, **kwargs):
         return "remote answer", 42 # return 42 tokens used
 
 class BrokenRemoteModel:
-    def generate(self, prompt):
+    def generate(self, prompt, **kwargs):
         raise Exception("Fireworks API error: invalid key")
 
 def test_token_scoring():
@@ -59,7 +59,7 @@ def test_broken_remote_fallback():
         pass
 
 class HandledBrokenRemoteModel:
-    def generate(self, prompt):
+    def generate(self, prompt, **kwargs):
         # Our real RemoteModel client returns (None, 0) on failure
         return None, 0
 

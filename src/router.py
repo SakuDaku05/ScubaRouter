@@ -5,6 +5,11 @@ never routes a query to remote without first trying it for free.
 
 Now supports per-task-type and per-difficulty confidence thresholds,
 so different categories get tuned independently without touching code.
+
+Pre-check priority:
+  1. SupraPreCheck (Supra-Router-51M, 51M params) — if use_supra=True
+  2. MatrixFactorizationPreCheck (RouteLLM MF)    — if use_mf_precheck=True
+  3. Strict mode: always force verifier             — default fallback
 """
 from dataclasses import dataclass
 from typing import Dict, List, Optional
@@ -26,14 +31,22 @@ class Router:
         threshold: float,
         static_escalate_task_types: Optional[List[str]] = None,
         use_mf_precheck: bool = False,
+        use_supra: bool = False,
+        supra_complexity_at: int = 3,
         per_type_thresholds: Optional[Dict[str, float]] = None,
         per_difficulty_thresholds: Optional[Dict[str, float]] = None,
     ):
         self.global_threshold = threshold
         self.static_escalate_task_types = set(static_escalate_task_types or [])
-        self.precheck = MatrixFactorizationPreCheck(use_pretrained=use_mf_precheck)
         self.per_type_thresholds = per_type_thresholds or {}
         self.per_difficulty_thresholds = per_difficulty_thresholds or {}
+
+        # Pre-check selection: Supra > MF > strict
+        if use_supra:
+            from .supra_precheck import SupraPreCheck
+            self.precheck = SupraPreCheck(complexity_escalate_at=supra_complexity_at)
+        else:
+            self.precheck = MatrixFactorizationPreCheck(use_pretrained=use_mf_precheck)
 
     def _effective_threshold(
         self, task_type: Optional[str], difficulty: Optional[str]
@@ -48,11 +61,14 @@ class Router:
             return self.per_type_thresholds[task_type], f"per_type[{task_type}]"
         return self.global_threshold, "global"
 
+    def precheck_query(self, query: str):
+        """Run the active pre-checker and return the full result object.
+        Callers can use result.looks_easy, result.score, and result.source."""
+        return self.precheck.check(query)
+
     def should_skip_verification(self, query: str) -> bool:
-        """Fast pre-check: if obviously easy, skip the extra local verification
-        call to save latency. Never skips straight to remote."""
-        result = self.precheck.check(query)
-        return result.looks_easy
+        """Convenience wrapper kept for backward compatibility."""
+        return self.precheck_query(query).looks_easy
 
     def decide(
         self,
