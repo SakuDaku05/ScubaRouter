@@ -8,6 +8,11 @@ from src.remote_model import RemoteModel
 from src.pipeline import RoutingPipeline
 from src.logger import Logger
 
+def check_keywords(answer: str, keywords: list) -> bool:
+    if not keywords: return True
+    lower = answer.lower()
+    return any(kw.lower() in lower for kw in keywords)
+
 def main():
     # Load config
     config = load_config("config/models.yaml")
@@ -26,7 +31,7 @@ def main():
     pipeline = RoutingPipeline(local_model, remote_model, config, logger=Logger())
 
     with open("eval/benchmark_dataset.json", "r", encoding="utf-8") as f:
-        tasks = json.load(f)[:5]  # Just the first 5 for a quick test
+        tasks = json.load(f)
 
     print("="*70)
     print(f"Testing {len(tasks)} tasks against local LM Studio + Mock Remote")
@@ -34,6 +39,8 @@ def main():
     
     results = []
     total_remote_tokens = 0
+    correct_count = 0
+    total_evaluated = 0
     t0 = time.time()
 
     for i, task in enumerate(tasks):
@@ -54,11 +61,20 @@ def main():
         conf = record["confidence"]
         
         print(f"Route: {route.upper()}  |  Conf: {conf:.2f}  |  Tokens: {tokens}  |  Time: {elapsed:.1f}s")
+        expected = task.get("expected_keywords", [])
+        is_correct = check_keywords(record["final_answer"], expected)
+        
+        if expected:
+            total_evaluated += 1
+            if is_correct: correct_count += 1
+            print(f"Correct: {is_correct} | Expected: {expected}")
+            
         if route == "local":
             print(f"Local Answer: {record['local_answer'][:150]}...")
         else:
             print(f"Remote Answer: {record['final_answer'][:150]}...")
             
+        record["is_correct"] = is_correct
         results.append(record)
 
     print("\n" + "="*70)
@@ -67,7 +83,10 @@ def main():
     print(f"Total tasks: {len(tasks)}")
     print(f"Local handled: {sum(1 for r in results if r['route'] == 'local')} (0 scored tokens)")
     print(f"Escalated:     {sum(1 for r in results if r['route'] == 'escalate')} (paid tokens)")
-    print(f"Total remote tokens used: {total_remote_tokens}")
+    print(f"Total remote tokens used (Cost Score): {total_remote_tokens}")
+    if total_evaluated > 0:
+        accuracy = correct_count / total_evaluated * 100
+        print(f"Accuracy: {correct_count}/{total_evaluated} ({accuracy:.1f}%)")
     print(f"Total time taken: {time.time() - t0:.1f}s")
 
 if __name__ == "__main__":

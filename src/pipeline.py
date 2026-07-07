@@ -136,36 +136,44 @@ class RoutingPipeline:
         # ── Step 1: Auto-classify task type (FREE) ────────────────────────
         task_type = classify_task_type(query, given_type=task_type)
 
-        # ── Step 2: Local model generates answer (FREE) ───────────────────
-        samples = self.local_model.generate(query, n_samples=self.n_consistency_samples)
-        raw_answer = samples[0] if samples else ""
-
-        # ── Step 3: Normalize the answer (FREE, pure regex) ───────────────
-        answer = normalize_answer(raw_answer)
-
-        # ── Step 4: Format validation (FREE, deterministic) ───────────────
-        format_ok, format_reason = format_validate(task_type or "", query, answer)
+        # ── Step 1.5: Supra Pre-check (FREE) ──────────────────────────────
         format_forced_escalation = False
         skip_verification = False
         from .supra_precheck import PreCheckResult as _PCR
         precheck_result = _PCR(looks_easy=False, score=0.0, source="not_run")
-
-        if not format_ok:
+        
+        confidence = -1.0
+        
+        if task_type in _ALWAYS_ESCALATE_TYPES:
             confidence = 0.0
-            format_forced_escalation = True
-        elif task_type in _ALWAYS_ESCALATE_TYPES:
-            # Hard-escalate: local models can't reliably solve these
-            confidence = 0.0
-            format_forced_escalation = False
         else:
-            # ── Step 5: Supra / MF pre-check (FREE) ───────────────────────
             precheck_result = self.router.precheck_query(query)
             skip_verification = precheck_result.looks_easy
-
-            if skip_verification:
-                confidence = 1.0
-            elif precheck_result.score == 0.0 and "strict" not in precheck_result.source:
+            if precheck_result.score == 0.0 and "strict" not in precheck_result.source:
                 confidence = 0.0
+        
+        raw_answer = ""
+        answer = ""
+        format_ok = True
+        format_reason = "not_run"
+        
+        # Only run local generation if we haven't already decided to escalate
+        if confidence == -1.0 or skip_verification:
+            # ── Step 2: Local model generates answer (FREE) ───────────────────
+            samples = self.local_model.generate(query, n_samples=self.n_consistency_samples)
+            raw_answer = samples[0] if samples else ""
+    
+            # ── Step 3: Normalize the answer (FREE, pure regex) ───────────────
+            answer = normalize_answer(raw_answer)
+    
+            # ── Step 4: Format validation (FREE, deterministic) ───────────────
+            format_ok, format_reason = format_validate(task_type or "", query, answer)
+            
+            if not format_ok:
+                confidence = 0.0
+                format_forced_escalation = True
+            elif skip_verification:
+                confidence = 1.0
             else:
                 # ── Step 6: Self-verifier (FREE, local model) ─────────────
                 confidence = self.verifier.score(query, answer, samples=samples)
