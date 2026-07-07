@@ -1,34 +1,60 @@
 local:
-  base_url: "https://api.groq.com/openai/v1"
-  api_key_env: "GROQ_API"
-  model: "llama-3.1-8b-instant"
+  # LM Studio during dev — NOT present in the Docker container.
+  # In the container, local model is loaded directly via llama-cpp-python.
+  base_url: "http://127.0.0.1:1234/v1"
+  api_key_env: "LM_STUDIO_API"
+  model: "qwen/qwen3-4b-thinking-2507"
   timeout: 30
 
 remote:
+  # ── Local dev fallback (Groq) ──────────────────────────────────────────────
+  # On evaluation day, the harness overrides ALL of this with env vars:
+  #   FIREWORKS_API_KEY, FIREWORKS_BASE_URL, ALLOWED_MODELS
+  # Do NOT hardcode model IDs here — they are read from ALLOWED_MODELS at runtime.
   base_url: "https://api.groq.com/openai/v1"
   api_key_env: "GROQ_API"
-  model: "llama-3.3-70b-versatile"
-  timeout: 60
+  model: "llama-3.3-70b-versatile"   # local dev only; ignored when ALLOWED_MODELS is set
+  timeout: 25
 
 routing:
   use_mock: false
-  verification_threshold: 0.70   # global fallback if no per-type threshold matches
+  # Global fallback threshold — used only when no per-type or per-difficulty match.
+  verification_threshold: 0.72
   self_consistency_samples: 1
-  static_escalate_task_types: []
   use_mf_precheck: false
+  use_supra: true
+  supra_complexity_at: 3
 
-  # Per-task-type confidence thresholds.
-  # Lower = more permissive (stays local more). Higher = stricter (escalates more).
+  # Hackathon Track 1 has 8 defined categories. Threshold tuning rationale:
+  # LOWER threshold = stay local more aggressively (trust local model more).
+  # HIGHER threshold = escalate more readily (distrust local, spend tokens).
+  # Goal: pass accuracy gate on ALL 8 types, minimize Fireworks tokens.
   per_type_thresholds:
-    math:          0.78  # math is verifiable; demand high confidence
-    translation:   0.82  # local 8B is weak on non-European languages
-    code:          0.62  # format_validator catches structural errors; be permissive
-    qa:            0.65  # factual QA is usually right; stay local aggressively
-    summarization: 0.70  # middle ground
+    # Easy categories — local model reliably correct; stay local hard.
+    factual_knowledge: 0.55   # Gemma handles well; escalate only if really unsure
+    sentiment:         0.50   # Very reliable locally; simple classification
+    summarization:     0.58   # Local is good; slightly lower than default
+    ner:               0.55   # Deterministic enough; local model strong here
 
-  # Per-difficulty overrides — applied AFTER per-type, takes final precedence.
+    # Medium categories — local model decent but can fail; moderate threshold.
+    code:              0.65   # format_validator catches structural errors
+    translation:       0.68   # weak on non-European; keep moderate
+
+    # Hard categories — local models weak; escalate much more readily.
+    math:              0.80   # Math errors can kill accuracy gate; demand high confidence
+    logical_reasoning: 0.99   # Effectively always escalate (hard-escalate also enforced in pipeline)
+
+    # Catch-all QA used when auto-classifier falls back
+    qa:                0.65
+
+  # Difficulty overrides — highest priority, applied AFTER per-type.
   per_difficulty_thresholds:
-    easy:      0.55  # almost always correct locally
+    easy:      0.50   # almost always correct locally; rarely escalate
     normal:    0.65
-    hard:      0.75
-    very_hard: 0.82  # escalate more readily on known-hard queries
+    hard:      0.76
+    very_hard: 0.85   # escalate much more readily on flagged-hard queries
+
+  # Explicitly force these task types to always go to Fireworks.
+  # logical_reasoning is also hard-coded in pipeline.py as a safety net.
+  static_escalate_task_types:
+    - logical_reasoning

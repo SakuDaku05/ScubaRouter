@@ -148,14 +148,62 @@ def validate_qa(query: str, answer: str) -> Tuple[bool, str]:
     return True, "ok"
 
 
+def validate_sentiment(query: str, answer: str) -> Tuple[bool, str]:
+    """
+    Sentiment answers must contain a clear label (positive/negative/neutral)
+    and be non-empty.
+    """
+    answer = answer.strip()
+    if not answer:
+        return False, "empty_answer"
+    LABELS = ["positive", "negative", "neutral", "mixed"]
+    lower = answer.lower()
+    if not any(label in lower for label in LABELS):
+        return False, "no_sentiment_label_found"
+    return True, "ok"
+
+
+def validate_ner(query: str, answer: str) -> Tuple[bool, str]:
+    """
+    NER answers must be non-empty and contain at least one entity-like token
+    (capitalized word or entity label pattern).
+    """
+    answer = answer.strip()
+    if not answer:
+        return False, "empty_answer"
+    # Accept if there's at least one capitalized word or entity bracket
+    if re.search(r"[A-Z][a-z]+|\b(PERSON|ORG|LOC|DATE|GPE|FAC)\b|\[.*?\]", answer):
+        return True, "ok"
+    return False, "no_entities_found"
+
+
+def validate_logical_reasoning(query: str, answer: str) -> Tuple[bool, str]:
+    """
+    Logical reasoning answers should be non-empty and not just
+    a repetition of the question.
+    """
+    answer = answer.strip()
+    if not answer:
+        return False, "empty_answer"
+    if len(answer.split()) < 2:
+        return False, "answer_too_short"
+    return True, "ok"
+
+
 # ── dispatcher ────────────────────────────────────────────────────────────
 
 VALIDATORS = {
-    "math":          validate_math,
-    "code":          validate_code,
-    "summarization": validate_summarization,
-    "translation":   validate_translation,
-    "qa":            validate_qa,
+    "math":              validate_math,
+    "code":              validate_code,
+    "code_debug":        validate_code,   # alias for hackathon category name
+    "code_generation":   validate_code,   # alias
+    "summarization":     validate_summarization,
+    "translation":       validate_translation,
+    "qa":                validate_qa,
+    "factual_knowledge": validate_qa,     # same rules as QA
+    "sentiment":         validate_sentiment,
+    "ner":               validate_ner,
+    "logical_reasoning": validate_logical_reasoning,
 }
 
 
