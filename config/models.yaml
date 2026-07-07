@@ -31,7 +31,7 @@ routing:
   # Goal: pass accuracy gate on ALL 8 types, minimize Fireworks tokens.
   per_type_thresholds:
     # Easy categories — local model reliably correct; stay local hard.
-    factual_knowledge: 0.55   # Gemma handles well; escalate only if really unsure
+    factual_knowledge: 0.55   # Qwen handles well; escalate only if really unsure
     sentiment:         0.50   # Very reliable locally; simple classification
     summarization:     0.58   # Local is good; slightly lower than default
     ner:               0.55   # Deterministic enough; local model strong here
