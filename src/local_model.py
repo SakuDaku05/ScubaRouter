@@ -20,7 +20,7 @@ class LocalModel:
         # We copied the model into the 'models' directory in the project root.
         self.gguf_path = os.environ.get(
             "LOCAL_GGUF_PATH", 
-            "models/Qwen3-4B-Thinking-2507-Q4_K_M.gguf"
+            "models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
         )
         
         if os.path.exists(self.gguf_path):
@@ -48,7 +48,7 @@ class LocalModel:
         self.client = OpenAICompatibleClient(
             base_url=config.get("base_url", "http://127.0.0.1:1234/v1"),
             api_key=api_key,
-            model=config.get("model", "qwen/qwen3-4b-thinking-2507"),
+            model=config.get("model", "qwen/qwen3-4b-2507"),
             timeout=config.get("timeout", 30),
         )
         self.use_api = True
