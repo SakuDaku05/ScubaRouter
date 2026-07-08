@@ -112,11 +112,11 @@ def _routing_decision(complexity: int, is_math: bool, is_code: bool,
         return True, 1.0, f"supra:easy[cplx={complexity},math=F,code=F]"
 
     # ── Definitely escalate: clearly hard ────────────────────────────────
-    if complexity >= complexity_escalate_at or is_math or is_code:
+    if complexity >= 5:
         return False, 0.0, f"supra:hard[cplx={complexity},math={is_math},code={is_code}]"
 
     # ── Ambiguous: let verifier decide ────────────────────────────────────
-    return False, 0.5, f"supra:ambiguous[cplx={complexity}]"
+    return False, 0.5, f"supra:ambiguous[cplx={complexity},math={is_math},code={is_code}]"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

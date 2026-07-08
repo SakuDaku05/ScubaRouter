@@ -158,25 +158,41 @@ class RoutingPipeline:
         format_reason = "not_run"
         
         # Only run local generation if we haven't already decided to escalate
+        answer_logprobs = None
+        samples = []
         if confidence == -1.0 or skip_verification:
-            # ── Step 2: Local model generates answer (FREE) ───────────────────
-            samples = self.local_model.generate(query, n_samples=self.n_consistency_samples)
+            # ── Step 2: Local model generates answer + logprobs (FREE) ───────────
+            try:
+                raw_results = self.local_model.generate_with_logprobs(
+                    query, n_samples=self.n_consistency_samples
+                )
+                samples = [text for text, _ in raw_results]
+                answer_logprobs = raw_results[0][1] if raw_results else None  # logprobs of first sample
+            except Exception:
+                # generate_with_logprobs not available — fall back to plain generate
+                samples = self.local_model.generate(query, n_samples=self.n_consistency_samples)
+                answer_logprobs = None
+
             raw_answer = samples[0] if samples else ""
-    
+
             # ── Step 3: Normalize the answer (FREE, pure regex) ───────────────
             answer = normalize_answer(raw_answer)
-    
+
             # ── Step 4: Format validation (FREE, deterministic) ───────────────
             format_ok, format_reason = format_validate(task_type or "", query, answer)
-            
+
             if not format_ok:
                 confidence = 0.0
                 format_forced_escalation = True
             elif skip_verification:
                 confidence = 1.0
             else:
-                # ── Step 6: Self-verifier (FREE, local model) ─────────────
-                confidence = self.verifier.score(query, answer, samples=samples)
+                # ── Step 6: Self-verifier with logprob priority (FREE) ────────
+                confidence = self.verifier.score(
+                    query, answer,
+                    samples=samples,
+                    logprobs=answer_logprobs,
+                )
 
         # ── Step 7: Decision gate (FREE) ──────────────────────────────────
         decision = self.router.decide(query, task_type, confidence, difficulty=difficulty)
