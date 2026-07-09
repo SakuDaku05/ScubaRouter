@@ -63,6 +63,30 @@ python eval/eval_harness.py
 
 No code changes needed for any of this — only `config/models.yaml` and `.env`.
 
+## Docker Deployment (Hackathon Submission)
+
+When submitting for the hackathon, your pipeline must run entirely within a Docker container. 
+
+To build the image (Note: this takes a few minutes the first time to download PyTorch and compile dependencies):
+```bash
+docker build -t routing-agent .
+```
+
+To test the container locally exactly as the evaluation harness will:
+```bash
+# Create mock input/output directories
+mkdir -p input output
+cp eval/sample_tasks.jsonl input/tasks.json
+
+# Run the container (it automatically executes run.py)
+docker run --rm \
+  -v $(pwd)/input:/input \
+  -v $(pwd)/output:/output \
+  -e FIREWORKS_API_KEY="your-api-key" \
+  routing-agent
+```
+The results will be written to `output/results.json`.
+
 ## Calibrating the threshold
 
 `routing.verification_threshold` in `config/models.yaml` controls how

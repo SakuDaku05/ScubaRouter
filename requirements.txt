@@ -3,7 +3,8 @@ pyyaml>=6.0
 python-dotenv>=1.0.0
 
 # Inference engine for local model inside Docker
-llama-cpp-python>=0.3.0
+# >=0.3.33 is strictly required to support the new Qwen3 architecture
+llama-cpp-python>=0.3.33
 
 # Needed for Supra-Router-51M pre-screener (51M-param routing model, runs on CPU)
 # These are not needed if use_supra: false in config/models.yaml
